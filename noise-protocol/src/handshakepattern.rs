@@ -1,10 +1,10 @@
 //! Handshake patterns.
 
-use arrayvec::ArrayVec;
+use heapless::Vec;
 
 /// A token in noise message patterns.
 #[allow(missing_docs)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Token {
     E,
     S,
@@ -20,9 +20,9 @@ use self::Token::*;
 /// Noise handshake pattern.
 #[derive(Clone)]
 pub struct HandshakePattern {
-    pre_i: ArrayVec<Token, 4>,
-    pre_r: ArrayVec<Token, 4>,
-    msg_patterns: ArrayVec<ArrayVec<Token, 8>, 8>,
+    pre_i: Vec<Token, 4>,
+    pre_r: Vec<Token, 4>,
+    msg_patterns: Vec<Vec<Token, 8>, 8>,
     name: &'static str,
 }
 
@@ -99,9 +99,9 @@ impl HandshakePattern {
         let mut new_msg_patterns = self.msg_patterns.clone();
         for pos in poses {
             if *pos == 0usize {
-                new_msg_patterns[0].insert(0, PSK);
+                new_msg_patterns[0].insert(0, PSK).unwrap();
             } else {
-                new_msg_patterns[pos - 1].push(PSK);
+                new_msg_patterns[pos - 1].push(PSK).unwrap();
             }
         }
         HandshakePattern {
@@ -115,13 +115,13 @@ impl HandshakePattern {
 
 macro_rules! vec {
     () => {
-        ArrayVec::new()
+        Vec::new()
     };
     ( $( $x:expr ),* ) => {
         {
-            let mut temp_vec = ArrayVec::new();
+            let mut temp_vec = Vec::new();
             $(
-                temp_vec.push($x);
+                temp_vec.push($x).unwrap();
             )*
             temp_vec
         }
