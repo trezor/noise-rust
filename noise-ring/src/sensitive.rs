@@ -1,4 +1,4 @@
-use noise_protocol::U8Array;
+use trezor_noise_protocol::U8Array;
 use zeroize::{Zeroize, Zeroizing};
 
 /// Struct holding a value that is safely zeroed on drop.
