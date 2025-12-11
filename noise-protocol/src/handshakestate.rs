@@ -2,8 +2,8 @@ use crate::cipherstate::CipherState;
 use crate::handshakepattern::{HandshakePattern, Token};
 use crate::symmetricstate::SymmetricState;
 use crate::traits::{Cipher, Hash, U8Array, DH};
-use arrayvec::{ArrayString, ArrayVec};
 use core::fmt::{Display, Error as FmtError, Formatter, Write};
+use heapless::{Deque, String};
 
 #[cfg(feature = "use_alloc")]
 use alloc::vec::Vec;
@@ -20,7 +20,7 @@ pub struct HandshakeState<D: DH, C: Cipher, H: Hash> {
     pattern: HandshakePattern,
     message_index: usize,
     pattern_has_psk: bool,
-    psks: ArrayVec<[u8; 32], 4>,
+    psks: Deque<[u8; 32], 4>,
 }
 
 impl<D, C, H> Clone for HandshakeState<D, C, H>
@@ -53,8 +53,8 @@ where
     H: Hash,
 {
     /// Get protocol name, e.g. Noise_IK_25519_ChaChaPoly_BLAKE2s.
-    fn get_name(pattern_name: &str) -> ArrayString<256> {
-        let mut ret = ArrayString::new();
+    fn get_name(pattern_name: &str) -> String<256> {
+        let mut ret = String::new();
         write!(
             &mut ret,
             "Noise_{}_{}_{}_{}",
@@ -148,7 +148,7 @@ where
             pattern,
             message_index: 0,
             pattern_has_psk,
-            psks: ArrayVec::new(),
+            psks: Deque::new(),
         }
     }
 
@@ -262,7 +262,7 @@ where
                     cur += len;
                 }
                 Token::PSK => {
-                    if let Some(psk) = self.psks.pop_at(0) {
+                    if let Some(psk) = self.psks.pop_front() {
                         self.symmetric.mix_key_and_hash(&psk);
                     } else {
                         return Err(Error::need_psk());
@@ -360,7 +360,7 @@ where
                     self.rs = Some(rs);
                 }
                 Token::PSK => {
-                    if let Some(psk) = self.psks.pop_at(0) {
+                    if let Some(psk) = self.psks.pop_front() {
                         self.symmetric.mix_key_and_hash(&psk);
                     } else {
                         return Err(Error::need_psk());
@@ -402,7 +402,7 @@ where
     ///
     /// If the PSK-queue becomes longer than 4.
     pub fn push_psk(&mut self, psk: &[u8]) {
-        self.psks.push(U8Array::from_slice(psk));
+        self.psks.push_back(U8Array::from_slice(psk)).unwrap();
     }
 
     /// Whether handshake has completed.
