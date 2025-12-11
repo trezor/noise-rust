@@ -13,6 +13,7 @@ pub struct HandshakeState<D: DH, C: Cipher, H: Hash> {
     symmetric: SymmetricState<C, H>,
     s: Option<D::Key>,
     e: Option<D::Key>,
+    s_mask: Option<D::Key>,
     rs: Option<D::Pubkey>,
     re: Option<D::Pubkey>,
     is_initiator: bool,
@@ -33,6 +34,7 @@ where
             symmetric: self.symmetric.clone(),
             s: self.s.as_ref().map(U8Array::clone),
             e: self.e.as_ref().map(U8Array::clone),
+            s_mask: self.s_mask.as_ref().map(U8Array::clone),
             rs: self.rs.as_ref().map(U8Array::clone),
             re: self.re.as_ref().map(U8Array::clone),
             is_initiator: self.is_initiator,
@@ -139,6 +141,7 @@ where
             symmetric,
             s,
             e,
+            s_mask: None,
             rs,
             re,
             is_initiator,
@@ -247,11 +250,15 @@ where
                         D::Pubkey::len()
                     };
 
+                    let mut s = D::pubkey(self.s.as_ref().unwrap());
+                    if let Some(s_mask) = &self.s_mask {
+                        let masked = D::dh(s_mask, &s).map_err(|_| Error::dh())?;
+                        s = D::Pubkey::from_slice(masked.as_slice());
+                    }
+
                     let encrypted_s_out = &mut out[cur..cur + len];
-                    self.symmetric.encrypt_and_hash(
-                        D::pubkey(self.s.as_ref().unwrap()).as_slice(),
-                        encrypted_s_out,
-                    );
+                    self.symmetric
+                        .encrypt_and_hash(s.as_slice(), encrypted_s_out);
                     cur += len;
                 }
                 Token::PSK => {
@@ -262,7 +269,16 @@ where
                     }
                 }
                 t => {
-                    let dh_result = self.perform_dh(t).map_err(|_| Error::dh())?;
+                    let mut dh_result = self.perform_dh(t).map_err(|_| Error::dh())?;
+                    if let Some(s_mask) = self.s_mask.as_ref() {
+                        if (matches!(t, Token::ES) && !self.is_initiator)
+                            || (matches!(t, Token::SE) && self.is_initiator)
+                            || matches!(t, Token::SS)
+                        {
+                            let unmasked = D::Pubkey::from_slice(dh_result.as_slice());
+                            dh_result = D::dh(s_mask, &unmasked).map_err(|_| Error::dh())?;
+                        }
+                    }
                     self.symmetric.mix_key(dh_result.as_slice());
                 }
             }
@@ -421,6 +437,16 @@ where
     /// Useful for noise-pipes.
     pub fn get_re(&self) -> Option<D::Pubkey> {
         self.re.as_ref().map(U8Array::clone)
+    }
+
+    /// Set local static key mask.
+    ///
+    /// Useful if the counterparty may or may not have local static pubkey
+    /// and you don't want to reveal it in the latter case.
+    ///
+    /// Handshake will panic if D::Result::len() != D::Pubkey::len().
+    pub fn set_s_mask(&mut self, s_mask: D::Key) {
+        self.s_mask = Some(s_mask);
     }
 
     /// Get whether this [`HandshakeState`] is created as initiator.
