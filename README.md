@@ -1,3 +1,14 @@
+# Trezor/Noise-Rust
+
+Fork of [github.com/blckngm/noise-rust](https://github.com/blckngm/noise-rust) with the following modifications:
+
+* add optional static key masking
+* make it possible to choose static key based on the static key of the counterparty
+* replace `arrayvec` dependency with `heapless`
+* add trezor- prefix to crate names
+
+Original readme follows.
+
 # Noise-Rust
 
 [![Crates.io](https://img.shields.io/crates/v/noise-protocol.svg)](https://crates.io/crates/noise-protocol)
