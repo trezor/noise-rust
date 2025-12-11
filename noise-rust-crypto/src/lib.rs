@@ -15,7 +15,7 @@ pub mod sensitive;
 
 use sensitive::Sensitive;
 
-use noise_protocol::*;
+use trezor_noise_protocol::*;
 #[cfg(feature = "x25519")]
 use x25519_dalek::{PublicKey, StaticSecret};
 

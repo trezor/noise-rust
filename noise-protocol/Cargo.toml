@@ -2,11 +2,11 @@
 edition = "2021"
 authors = ["trevp", "Guanhao Yin <sopium@mysterious.site>"]
 license = "Unlicense"
-name = "noise-protocol"
+name = "trezor-noise-protocol"
 readme = "README.md"
-repository = "https://github.com/sopium/noise-rust"
+repository = "https://github.com/trezor/noise-rust"
 version = "0.2.0"
-description = "Noise Protocol Framework implementation."
+description = "Noise Protocol Framework implementation, customized."
 keywords = ["noise"]
 categories = ["cryptography"]
 

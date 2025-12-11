@@ -3,7 +3,7 @@
 pub mod sensitive;
 use sensitive::Sensitive;
 
-use noise_protocol::{Cipher, Hash};
+use trezor_noise_protocol::{Cipher, Hash};
 use ring::{
     aead::{self, LessSafeKey, UnboundKey},
     digest,
