@@ -439,6 +439,17 @@ where
         self.re.as_ref().map(U8Array::clone)
     }
 
+    /// Set local static key.
+    ///
+    /// Useful if you want to choose the static key based on information
+    /// from previous messages, e.g. remote static pubkey.
+    ///
+    /// Handshake will panic if the static key is not set at a time it
+    /// is expected to be set.
+    pub fn set_s(&mut self, s: D::Key) {
+        self.s = Some(s);
+    }
+
     /// Set local static key mask.
     ///
     /// Useful if the counterparty may or may not have local static pubkey
