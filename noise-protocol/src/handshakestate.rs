@@ -538,6 +538,7 @@ impl Error {
         }
     }
 
+    #[cfg(any(feature = "use_std", feature = "use_alloc"))]
     fn too_short() -> Error {
         Error {
             kind: ErrorKind::TooShort,
