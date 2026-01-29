@@ -57,13 +57,6 @@ where
         self.h = h.result();
     }
 
-    pub fn mix_key_and_hash(&mut self, input_key_material: &[u8]) {
-        let (ck, temp_h, temp_k) = H::hkdf3(self.ck.as_slice(), input_key_material);
-        self.ck = ck;
-        self.mix_hash(temp_h.as_slice());
-        self.cipherstate = Some(CipherState::new(&temp_k.as_slice()[..C::key_len()], 0));
-    }
-
     pub fn has_key(&self) -> bool {
         self.cipherstate.is_some()
     }

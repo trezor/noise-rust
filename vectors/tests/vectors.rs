@@ -75,14 +75,10 @@ struct Vector {
     fallback_pattern: Option<String>,
 
     init_prologue: HexString,
-    #[serde(default)]
-    init_psks: Vec<HexString>,
     init_static: Option<HexString>,
     init_ephemeral: HexString,
     init_remote_static: Option<HexString>,
     resp_prologue: HexString,
-    #[serde(default)]
-    resp_psks: Vec<HexString>,
     resp_static: Option<HexString>,
     resp_ephemeral: Option<HexString>,
     resp_remote_static: Option<HexString>,
@@ -138,41 +134,6 @@ fn get_pattern_by_name(name: &str) -> Option<HandshakePattern> {
                 insert(noise_in());
                 insert(noise_ik());
                 insert(noise_ix());
-                insert(noise_n_psk0());
-                insert(noise_k_psk0());
-                insert(noise_x_psk1());
-                insert(noise_nn_psk0());
-                insert(noise_nn_psk2());
-                insert(noise_nk_psk0());
-                insert(noise_nk_psk2());
-                insert(noise_nx_psk2());
-                insert(noise_xn_psk3());
-                insert(noise_xk_psk3());
-                insert(noise_xx_psk3());
-                insert(noise_kn_psk0());
-                insert(noise_kn_psk2());
-                insert(noise_kk_psk0());
-                insert(noise_kk_psk2());
-                insert(noise_kx_psk2());
-                insert(noise_in_psk1());
-                insert(noise_in_psk2());
-                insert(noise_ik_psk1());
-                insert(noise_ik_psk2());
-                insert(noise_ix_psk2());
-
-                insert(noise_nn_psk0_psk2());
-                insert(noise_nx_psk0_psk1_psk2());
-                insert(noise_xn_psk1_psk3());
-                insert(noise_xk_psk0_psk3());
-                insert(noise_kn_psk1_psk2());
-                insert(noise_kk_psk0_psk2());
-                insert(noise_in_psk1_psk2());
-                insert(noise_ik_psk0_psk2());
-                insert(noise_ix_psk0_psk2());
-                insert(noise_xx_psk0_psk1());
-                insert(noise_xx_psk0_psk2());
-                insert(noise_xx_psk0_psk3());
-                insert(noise_xx_psk0_psk1_psk2_psk3());
             }
             map
         };
@@ -237,13 +198,6 @@ where
 
     let mut init_ciphers = None;
     let mut resp_ciphers = None;
-
-    for psk in &v.init_psks {
-        h_i.push_psk(&psk);
-    }
-    for psk in &v.resp_psks {
-        h_r.push_psk(&psk);
-    }
 
     for m in &v.messages {
         let payload = m.payload.as_ref();
