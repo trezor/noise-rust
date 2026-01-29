@@ -3,7 +3,7 @@ use crate::handshakepattern::{HandshakePattern, Token};
 use crate::symmetricstate::SymmetricState;
 use crate::traits::{Cipher, Hash, U8Array, DH};
 use core::fmt::{Display, Error as FmtError, Formatter, Write};
-use heapless::{Deque, String};
+use heapless::String;
 
 #[cfg(feature = "use_alloc")]
 use alloc::vec::Vec;
@@ -19,8 +19,6 @@ pub struct HandshakeState<D: DH, C: Cipher, H: Hash> {
     is_initiator: bool,
     pattern: HandshakePattern,
     message_index: usize,
-    pattern_has_psk: bool,
-    psks: Deque<[u8; 32], 4>,
 }
 
 impl<D, C, H> Clone for HandshakeState<D, C, H>
@@ -40,8 +38,6 @@ where
             is_initiator: self.is_initiator,
             pattern: self.pattern.clone(),
             message_index: self.message_index,
-            pattern_has_psk: self.pattern_has_psk,
-            psks: self.psks.clone(),
         }
     }
 }
@@ -91,7 +87,6 @@ where
         P: AsRef<[u8]>,
     {
         let mut symmetric = SymmetricState::new(Self::get_name(pattern.get_name()).as_bytes());
-        let pattern_has_psk = pattern.has_psk();
 
         // Mix in prologue.
         symmetric.mix_hash(prologue.as_ref());
@@ -122,15 +117,9 @@ where
                     if is_initiator {
                         let re = re.as_ref().unwrap().as_slice();
                         symmetric.mix_hash(re);
-                        if pattern_has_psk {
-                            symmetric.mix_key(re);
-                        }
                     } else {
                         let e = D::pubkey(e.as_ref().unwrap());
                         symmetric.mix_hash(e.as_slice());
-                        if pattern_has_psk {
-                            symmetric.mix_key(e.as_slice());
-                        }
                     }
                 }
                 _ => panic!("Unexpected token in pre message"),
@@ -147,8 +136,6 @@ where
             is_initiator,
             pattern,
             message_index: 0,
-            pattern_has_psk,
-            psks: Deque::new(),
         }
     }
 
@@ -169,9 +156,6 @@ where
             match t {
                 Token::E => {
                     overhead += D::Pubkey::len();
-                    if self.pattern_has_psk {
-                        has_key = true;
-                    }
                 }
                 Token::S => {
                     overhead += D::Pubkey::len();
@@ -206,7 +190,6 @@ where
     /// # Error Kinds
     ///
     /// - [DH](ErrorKind::DH): DH operation failed.
-    /// - [NeedPSK](ErrorKind::NeedPSK): A PSK token is encountered but none is available.
     ///
     /// # Panics
     ///
@@ -237,9 +220,6 @@ where
                     }
                     let e_pk = D::pubkey(self.e.as_ref().unwrap());
                     self.symmetric.mix_hash(e_pk.as_slice());
-                    if self.pattern_has_psk {
-                        self.symmetric.mix_key(e_pk.as_slice());
-                    }
                     out[cur..cur + D::Pubkey::len()].copy_from_slice(e_pk.as_slice());
                     cur += D::Pubkey::len();
                 }
@@ -260,13 +240,6 @@ where
                     self.symmetric
                         .encrypt_and_hash(s.as_slice(), encrypted_s_out);
                     cur += len;
-                }
-                Token::PSK => {
-                    if let Some(psk) = self.psks.pop_front() {
-                        self.symmetric.mix_key_and_hash(&psk);
-                    } else {
-                        return Err(Error::need_psk());
-                    }
                 }
                 t => {
                     let mut dh_result = self.perform_dh(t).map_err(|_| Error::dh())?;
@@ -294,8 +267,6 @@ where
     /// # Error Kinds
     ///
     /// - [DH](ErrorKind::DH): DH operation failed.
-    /// - [NeedPSK](ErrorKind::NeedPSK): A PSK token is encountered but none is
-    ///   available.
     /// - [Decryption](ErrorKind::Decryption): Decryption failed.
     ///
     /// # Error Recovery
@@ -342,9 +313,6 @@ where
                 Token::E => {
                     let re = D::Pubkey::from_slice(get(D::Pubkey::len()));
                     self.symmetric.mix_hash(re.as_slice());
-                    if self.pattern_has_psk {
-                        self.symmetric.mix_key(re.as_slice());
-                    }
                     self.re = Some(re);
                 }
                 Token::S => {
@@ -358,13 +326,6 @@ where
                         .decrypt_and_hash(temp, rs.as_mut())
                         .map_err(|_| Error::decryption())?;
                     self.rs = Some(rs);
-                }
-                Token::PSK => {
-                    if let Some(psk) = self.psks.pop_front() {
-                        self.symmetric.mix_key_and_hash(&psk);
-                    } else {
-                        return Err(Error::need_psk());
-                    }
                 }
                 t => {
                     let dh_result = self.perform_dh(t).map_err(|_| Error::dh())?;
@@ -394,15 +355,6 @@ where
             self.read_message(data, &mut out)?;
             Ok(out)
         }
-    }
-
-    /// Push a PSK to the PSK-queue.
-    ///
-    /// # Panics
-    ///
-    /// If the PSK-queue becomes longer than 4.
-    pub fn push_psk(&mut self, psk: &[u8]) {
-        self.psks.push_back(U8Array::from_slice(psk)).unwrap();
     }
 
     /// Whether handshake has completed.
@@ -511,8 +463,6 @@ pub struct Error {
 pub enum ErrorKind {
     /// A DH operation has failed.
     DH,
-    /// A PSK is needed, but none is available.
-    NeedPSK,
     /// Decryption failed.
     Decryption,
     /// The message is too short, and impossible to read.
@@ -523,12 +473,6 @@ impl Error {
     fn dh() -> Error {
         Error {
             kind: ErrorKind::DH,
-        }
-    }
-
-    fn need_psk() -> Error {
-        Error {
-            kind: ErrorKind::NeedPSK,
         }
     }
 
@@ -562,7 +506,6 @@ impl ::std::error::Error for Error {
     fn description(&self) -> &'static str {
         match self.kind {
             ErrorKind::DH => "DH error",
-            ErrorKind::NeedPSK => "Need PSK",
             ErrorKind::Decryption => "Decryption failed",
             ErrorKind::TooShort => "Message is too short",
         }

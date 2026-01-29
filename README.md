@@ -5,6 +5,7 @@ Fork of [github.com/blckngm/noise-rust](https://github.com/blckngm/noise-rust) w
 * add optional static key masking
 * make it possible to choose static key based on the static key of the counterparty
 * replace `arrayvec` dependency with `heapless`
+* remove PSK support to make structs smaller
 * add trezor- prefix to crate names
 
 Original readme follows.
