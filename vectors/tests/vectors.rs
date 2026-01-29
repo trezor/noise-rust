@@ -7,9 +7,6 @@ use hex::{decode, encode};
 use lazy_static::lazy_static;
 use noise::patterns::*;
 use noise::*;
-use trezor_noise_protocol as noise;
-use trezor_noise_ring as ring_crypto;
-use trezor_noise_rust_crypto as crypto;
 use rayon::prelude::*;
 use regex::Regex;
 use serde::de::{Error, Unexpected};
@@ -17,6 +14,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json as json;
 use std::collections::HashMap;
 use std::ops::Deref;
+use trezor_noise_protocol as noise;
+use trezor_noise_ring as ring_crypto;
+use trezor_noise_rust_crypto as crypto;
 
 #[derive(Clone)]
 struct HexString(Vec<u8>);
