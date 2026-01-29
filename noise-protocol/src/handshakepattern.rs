@@ -4,7 +4,7 @@ use heapless::Vec;
 
 /// A token in noise message patterns.
 #[allow(missing_docs)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub enum Token {
     E,
     S,
@@ -93,7 +93,7 @@ macro_rules! vec {
         {
             let mut temp_vec = Vec::new();
             $(
-                temp_vec.push($x).unwrap();
+                temp_vec.push($x).map_err(|_| ()).unwrap();
             )*
             temp_vec
         }
