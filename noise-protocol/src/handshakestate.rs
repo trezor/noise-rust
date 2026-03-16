@@ -412,6 +412,14 @@ where
         self.s_mask = Some(s_mask);
     }
 
+    /// Set local ephemeral key.
+    ///
+    /// Not necessary unless you're implementing something like key masking
+    /// - if unset, a random key will be generated.
+    pub fn set_e(&mut self, e: D::Key) {
+        self.e = Some(e);
+    }
+
     /// Get whether this [`HandshakeState`] is created as initiator.
     pub fn get_is_initiator(&self) -> bool {
         self.is_initiator
