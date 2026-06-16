@@ -2,8 +2,8 @@ use crate::cipherstate::CipherState;
 use crate::handshakepattern::{HandshakePattern, Token};
 use crate::symmetricstate::SymmetricState;
 use crate::traits::{Cipher, Hash, U8Array, DH};
-use arrayvec::{ArrayString, ArrayVec};
 use core::fmt::{Display, Error as FmtError, Formatter, Write};
+use heapless::String;
 
 #[cfg(feature = "use_alloc")]
 use alloc::vec::Vec;
@@ -13,13 +13,12 @@ pub struct HandshakeState<D: DH, C: Cipher, H: Hash> {
     symmetric: SymmetricState<C, H>,
     s: Option<D::Key>,
     e: Option<D::Key>,
+    s_mask: Option<D::Key>,
     rs: Option<D::Pubkey>,
     re: Option<D::Pubkey>,
     is_initiator: bool,
     pattern: HandshakePattern,
     message_index: usize,
-    pattern_has_psk: bool,
-    psks: ArrayVec<[u8; 32], 4>,
 }
 
 impl<D, C, H> Clone for HandshakeState<D, C, H>
@@ -33,13 +32,12 @@ where
             symmetric: self.symmetric.clone(),
             s: self.s.as_ref().map(U8Array::clone),
             e: self.e.as_ref().map(U8Array::clone),
+            s_mask: self.s_mask.as_ref().map(U8Array::clone),
             rs: self.rs.as_ref().map(U8Array::clone),
             re: self.re.as_ref().map(U8Array::clone),
             is_initiator: self.is_initiator,
             pattern: self.pattern.clone(),
             message_index: self.message_index,
-            pattern_has_psk: self.pattern_has_psk,
-            psks: self.psks.clone(),
         }
     }
 }
@@ -51,8 +49,8 @@ where
     H: Hash,
 {
     /// Get protocol name, e.g. Noise_IK_25519_ChaChaPoly_BLAKE2s.
-    fn get_name(pattern_name: &str) -> ArrayString<256> {
-        let mut ret = ArrayString::new();
+    fn get_name(pattern_name: &str) -> String<256> {
+        let mut ret = String::new();
         write!(
             &mut ret,
             "Noise_{}_{}_{}_{}",
@@ -89,7 +87,6 @@ where
         P: AsRef<[u8]>,
     {
         let mut symmetric = SymmetricState::new(Self::get_name(pattern.get_name()).as_bytes());
-        let pattern_has_psk = pattern.has_psk();
 
         // Mix in prologue.
         symmetric.mix_hash(prologue.as_ref());
@@ -120,15 +117,9 @@ where
                     if is_initiator {
                         let re = re.as_ref().unwrap().as_slice();
                         symmetric.mix_hash(re);
-                        if pattern_has_psk {
-                            symmetric.mix_key(re);
-                        }
                     } else {
                         let e = D::pubkey(e.as_ref().unwrap());
                         symmetric.mix_hash(e.as_slice());
-                        if pattern_has_psk {
-                            symmetric.mix_key(e.as_slice());
-                        }
                     }
                 }
                 _ => panic!("Unexpected token in pre message"),
@@ -139,13 +130,12 @@ where
             symmetric,
             s,
             e,
+            s_mask: None,
             rs,
             re,
             is_initiator,
             pattern,
             message_index: 0,
-            pattern_has_psk,
-            psks: ArrayVec::new(),
         }
     }
 
@@ -166,9 +156,6 @@ where
             match t {
                 Token::E => {
                     overhead += D::Pubkey::len();
-                    if self.pattern_has_psk {
-                        has_key = true;
-                    }
                 }
                 Token::S => {
                     overhead += D::Pubkey::len();
@@ -203,7 +190,6 @@ where
     /// # Error Kinds
     ///
     /// - [DH](ErrorKind::DH): DH operation failed.
-    /// - [NeedPSK](ErrorKind::NeedPSK): A PSK token is encountered but none is available.
     ///
     /// # Panics
     ///
@@ -234,9 +220,6 @@ where
                     }
                     let e_pk = D::pubkey(self.e.as_ref().unwrap());
                     self.symmetric.mix_hash(e_pk.as_slice());
-                    if self.pattern_has_psk {
-                        self.symmetric.mix_key(e_pk.as_slice());
-                    }
                     out[cur..cur + D::Pubkey::len()].copy_from_slice(e_pk.as_slice());
                     cur += D::Pubkey::len();
                 }
@@ -247,22 +230,28 @@ where
                         D::Pubkey::len()
                     };
 
+                    let mut s = D::pubkey(self.s.as_ref().unwrap());
+                    if let Some(s_mask) = &self.s_mask {
+                        let masked = D::dh(s_mask, &s).map_err(|_| Error::dh())?;
+                        s = D::Pubkey::from_slice(masked.as_slice());
+                    }
+
                     let encrypted_s_out = &mut out[cur..cur + len];
-                    self.symmetric.encrypt_and_hash(
-                        D::pubkey(self.s.as_ref().unwrap()).as_slice(),
-                        encrypted_s_out,
-                    );
+                    self.symmetric
+                        .encrypt_and_hash(s.as_slice(), encrypted_s_out);
                     cur += len;
                 }
-                Token::PSK => {
-                    if let Some(psk) = self.psks.pop_at(0) {
-                        self.symmetric.mix_key_and_hash(&psk);
-                    } else {
-                        return Err(Error::need_psk());
-                    }
-                }
                 t => {
-                    let dh_result = self.perform_dh(t).map_err(|_| Error::dh())?;
+                    let mut dh_result = self.perform_dh(t).map_err(|_| Error::dh())?;
+                    if let Some(s_mask) = self.s_mask.as_ref() {
+                        if (matches!(t, Token::ES) && !self.is_initiator)
+                            || (matches!(t, Token::SE) && self.is_initiator)
+                            || matches!(t, Token::SS)
+                        {
+                            let unmasked = D::Pubkey::from_slice(dh_result.as_slice());
+                            dh_result = D::dh(s_mask, &unmasked).map_err(|_| Error::dh())?;
+                        }
+                    }
                     self.symmetric.mix_key(dh_result.as_slice());
                 }
             }
@@ -278,8 +267,6 @@ where
     /// # Error Kinds
     ///
     /// - [DH](ErrorKind::DH): DH operation failed.
-    /// - [NeedPSK](ErrorKind::NeedPSK): A PSK token is encountered but none is
-    ///   available.
     /// - [Decryption](ErrorKind::Decryption): Decryption failed.
     ///
     /// # Error Recovery
@@ -326,9 +313,6 @@ where
                 Token::E => {
                     let re = D::Pubkey::from_slice(get(D::Pubkey::len()));
                     self.symmetric.mix_hash(re.as_slice());
-                    if self.pattern_has_psk {
-                        self.symmetric.mix_key(re.as_slice());
-                    }
                     self.re = Some(re);
                 }
                 Token::S => {
@@ -342,13 +326,6 @@ where
                         .decrypt_and_hash(temp, rs.as_mut())
                         .map_err(|_| Error::decryption())?;
                     self.rs = Some(rs);
-                }
-                Token::PSK => {
-                    if let Some(psk) = self.psks.pop_at(0) {
-                        self.symmetric.mix_key_and_hash(&psk);
-                    } else {
-                        return Err(Error::need_psk());
-                    }
                 }
                 t => {
                     let dh_result = self.perform_dh(t).map_err(|_| Error::dh())?;
@@ -378,15 +355,6 @@ where
             self.read_message(data, &mut out)?;
             Ok(out)
         }
-    }
-
-    /// Push a PSK to the PSK-queue.
-    ///
-    /// # Panics
-    ///
-    /// If the PSK-queue becomes longer than 4.
-    pub fn push_psk(&mut self, psk: &[u8]) {
-        self.psks.push(U8Array::from_slice(psk));
     }
 
     /// Whether handshake has completed.
@@ -421,6 +389,35 @@ where
     /// Useful for noise-pipes.
     pub fn get_re(&self) -> Option<D::Pubkey> {
         self.re.as_ref().map(U8Array::clone)
+    }
+
+    /// Set local static key.
+    ///
+    /// Useful if you want to choose the static key based on information
+    /// from previous messages, e.g. remote static pubkey.
+    ///
+    /// Handshake will panic if the static key is not set at a time it
+    /// is expected to be set.
+    pub fn set_s(&mut self, s: D::Key) {
+        self.s = Some(s);
+    }
+
+    /// Set local static key mask.
+    ///
+    /// Useful if the counterparty may or may not have local static pubkey
+    /// and you don't want to reveal it in the latter case.
+    ///
+    /// Handshake will panic if D::Result::len() != D::Pubkey::len().
+    pub fn set_s_mask(&mut self, s_mask: D::Key) {
+        self.s_mask = Some(s_mask);
+    }
+
+    /// Set local ephemeral key.
+    ///
+    /// Not necessary unless you're implementing something like key masking
+    /// - if unset, a random key will be generated.
+    pub fn set_e(&mut self, e: D::Key) {
+        self.e = Some(e);
     }
 
     /// Get whether this [`HandshakeState`] is created as initiator.
@@ -474,8 +471,6 @@ pub struct Error {
 pub enum ErrorKind {
     /// A DH operation has failed.
     DH,
-    /// A PSK is needed, but none is available.
-    NeedPSK,
     /// Decryption failed.
     Decryption,
     /// The message is too short, and impossible to read.
@@ -489,18 +484,13 @@ impl Error {
         }
     }
 
-    fn need_psk() -> Error {
-        Error {
-            kind: ErrorKind::NeedPSK,
-        }
-    }
-
     fn decryption() -> Error {
         Error {
             kind: ErrorKind::Decryption,
         }
     }
 
+    #[cfg(any(feature = "use_std", feature = "use_alloc"))]
     fn too_short() -> Error {
         Error {
             kind: ErrorKind::TooShort,
@@ -524,7 +514,6 @@ impl ::std::error::Error for Error {
     fn description(&self) -> &'static str {
         match self.kind {
             ErrorKind::DH => "DH error",
-            ErrorKind::NeedPSK => "Need PSK",
             ErrorKind::Decryption => "Decryption failed",
             ErrorKind::TooShort => "Message is too short",
         }

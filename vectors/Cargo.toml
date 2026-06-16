@@ -1,6 +1,6 @@
 [package]
 edition = "2021"
-name = "noise-vectors"
+name = "trezor-noise-vectors"
 version = "0.0.0"
 authors = ["Guanhao Yin <sopium@mysterious.site>"]
 build = "build.rs"
@@ -8,9 +8,9 @@ build = "build.rs"
 [dev-dependencies]
 hex = "0.4.3"
 lazy_static = "1.4"
-noise-protocol = { path = "../noise-protocol" }
-noise-ring = { path = "../noise-ring" }
-noise-rust-crypto = { path = "../noise-rust-crypto" }
+trezor-noise-protocol = { path = "../noise-protocol" }
+trezor-noise-ring = { path = "../noise-ring" }
+trezor-noise-rust-crypto = { path = "../noise-rust-crypto" }
 rayon = "1.7"
 regex = "1.7"
 serde = { version = "1", features = ["derive"] }

@@ -3,11 +3,11 @@
 pub mod sensitive;
 use sensitive::Sensitive;
 
-use noise_protocol::{Cipher, Hash};
 use ring::{
     aead::{self, LessSafeKey, UnboundKey},
     digest,
 };
+use trezor_noise_protocol::{Cipher, Hash};
 
 pub struct Sha256 {
     context: digest::Context,
