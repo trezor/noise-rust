@@ -1,11 +1,11 @@
 [package]
 edition = "2021"
-authors = ["trevp", "Guanhao Yin <sopium@mysterious.site>"]
+authors = ["trevp", "Guanhao Yin <sopium@mysterious.site>", "Martin Milata <martin@martinmilata.cz>"]
 license = "Unlicense"
 name = "trezor-noise-protocol"
 readme = "README.md"
 repository = "https://github.com/trezor/noise-rust"
-version = "0.2.0"
+version = "0.2.1"
 description = "Noise Protocol Framework implementation, customized."
 keywords = ["noise"]
 categories = ["cryptography"]
